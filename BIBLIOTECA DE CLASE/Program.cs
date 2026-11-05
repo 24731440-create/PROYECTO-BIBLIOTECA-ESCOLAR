@@ -50,7 +50,7 @@ namespace BibliotecaEscolar
     {
         static void Main(string[] args)
         {
-            // Carga inicial de 8 títulos
+            // Catálogo de 8 títulos
             Titulo[] catalogo = new Titulo[8]
             {
                 new Titulo("Cien Años de Soledad", "9780307474728", 15, 5),
@@ -63,85 +63,60 @@ namespace BibliotecaEscolar
                 new Titulo("La Casa de los Espíritus", "9780307474803", 18, 4)
             };
 
-            // Se ordena inicialmente por préstamos (de mayor a menor) con el algoritmo manual por inserción
-            OrdenarPorInsercionPrestamos(catalogo);
+            Console.WriteLine("=========================================================================");
+            Console.WriteLine("   DÍA 7: MEDICIÓN DE COMPARACIONES DE BÚSQUEDA BINARIA POR ISBN");
+            Console.WriteLine("=========================================================================");
 
-            bool salir = false;
-            while (!salir)
+            // 1. Preparar una copia ordenada por ISBN (requisito indispensable)
+            Titulo[] catalogoISBN = (Titulo[])catalogo.Clone();
+            OrdenarPorISBN(catalogoISBN);
+
+            // Arreglo plano solo con los ISBNs ordenados (para Array.BinarySearch)
+            string[] isbnsOrdenados = new string[catalogoISBN.Length];
+            for (int i = 0; i < catalogoISBN.Length; i++)
             {
-                Console.Clear();
-                Console.WriteLine("=========================================================");
-                Console.WriteLine("     SISTEMA DE GESTIÓN DE BIBLIOTECA ESCOLAR (DÍA 6)");
-                Console.WriteLine("=========================================================");
-                Console.WriteLine("1. Mostrar Catálogo Completo (Ordenado por Préstamos)");
-                Console.WriteLine("2. Registrar Préstamo de un Libro");
-                Console.WriteLine("3. Buscar Libro por Título (Secuencial)");
-                Console.WriteLine("4. Buscar Libro por ISBN (Binaria Propia)");
-                Console.WriteLine("5. Ejecutar Prueba de Escritorio Completa (3 Préstamos)");
-                Console.WriteLine("6. Salir");
-                Console.Write("\nSeleccione una opción: ");
-
-                string opcion = Console.ReadLine();
-
-                switch (opcion)
-                {
-                    case "1":
-                        MostrarCatalogo(catalogo);
-                        Pausar();
-                        break;
-                    case "2":
-                        OpcionRegistrarPrestamo(catalogo);
-                        Pausar();
-                        break;
-                    case "3":
-                        OpcionBuscarPorTitulo(catalogo);
-                        Pausar();
-                        break;
-                    case "4":
-                        OpcionBuscarPorISBN(catalogo);
-                        Pausar();
-                        break;
-                    case "5":
-                        EjecutarPruebaEscritorio(catalogo);
-                        Pausar();
-                        break;
-                    case "6":
-                        salir = true;
-                        Console.WriteLine("\n¡Saliendo del sistema! ¡Hasta luego!");
-                        break;
-                    default:
-                        Console.WriteLine("\nOpción no válida. Presione cualquier tecla para intentar de nuevo...");
-                        Console.ReadKey();
-                        break;
-                }
+                isbnsOrdenados[i] = catalogoISBN[i].ISBN;
             }
+
+            // 2. Las 5 consultas requeridas (3 existentes y 2 no existentes)
+            string[] consultasISBN = new string[5]
+            {
+                "9780156013987", // Existente (El Principito)
+                "9788424116484", // Existente (Don Quijote de la Mancha)
+                "9788437604183", // Existente (Pedro Páramo)
+                "9780000000000", // No existente (Caso borde inferior)
+                "9789999999999"  // No existente (Caso borde superior)
+            };
+
+            Console.WriteLine($"\n{"Consulta ISBN",-16} | {"Existe",-8} | {"Comparaciones (Propia)",-22} | {"Array.BinarySearch (Índice)",-28}");
+            Console.WriteLine(new string('-', 82));
+
+            // 3. Ejecución y medición de las 5 consultas
+            foreach (string isbn in consultasISBN)
+            {
+                int comparacionesPropia = 0;
+                int indicePropio = BusquedaBinariaConConteo(catalogoISBN, isbn, out comparacionesPropia);
+
+                // Verificación mediante la función nativa del lenguaje
+                int indiceOficial = Array.BinarySearch(isbnsOrdenados, isbn);
+
+                bool existe = indicePropio != -1;
+                string resultadoOficial = indiceOficial >= 0 ? $"Encontrado (idx {indiceOficial})" : $"No Encontrado (idx {indiceOficial})";
+
+                Console.WriteLine($"{isbn,-16} | {(existe ? "SÍ" : "NO"),-8} | {comparacionesPropia,-22} | {resultadoOficial,-28}");
+            }
+
+            Console.WriteLine("\nMediciones completadas con éxito.");
         }
 
-        // ===============================================================
-        // MÉTODOS DE ORDENAMIENTO Y BÚSQUEDA MANUALES
-        // ===============================================================
-
-        static void OrdenarPorInsercionPrestamos(Titulo[] arreglo)
-        {
-            for (int i = 1; i < arreglo.Length; i++)
-            {
-                Titulo clave = arreglo[i];
-                int j = i - 1;
-                while (j >= 0 && arreglo[j].PrestamosHistoricos < clave.PrestamosHistoricos)
-                {
-                    arreglo[j + 1] = arreglo[j];
-                    j--;
-                }
-                arreglo[j + 1] = clave;
-            }
-        }
-
+        // Ordenamiento por inserción manual por ISBN
         static void OrdenarPorISBN(Titulo[] arreglo)
         {
             for (int i = 1; i < arreglo.Length; i++)
             {
                 Titulo clave = arreglo[i];
                 int j = i - 1;
+
                 while (j >= 0 && string.Compare(arreglo[j].ISBN, clave.ISBN, StringComparison.Ordinal) > 0)
                 {
                     arreglo[j + 1] = arreglo[j];
@@ -151,137 +126,37 @@ namespace BibliotecaEscolar
             }
         }
 
-        static int BusquedaBinariaISBN(Titulo[] catalogoOrdenadoISBN, string isbnBuscado)
+        // Búsqueda Binaria Propia con Contador de Comparaciones
+        static int BusquedaBinariaConConteo(Titulo[] arreglo, string isbn, out int comparaciones)
         {
+            comparaciones = 0;
             int inicio = 0;
-            int fin = catalogoOrdenadoISBN.Length - 1;
+            int fin = arreglo.Length - 1;
 
             while (inicio <= fin)
             {
                 int medio = inicio + (fin - inicio) / 2;
-                int comp = string.Compare(catalogoOrdenadoISBN[medio].ISBN, isbnBuscado, StringComparison.Ordinal);
 
-                if (comp == 0) return medio;
-                if (comp < 0) inicio = medio + 1;
-                else fin = medio - 1;
-            }
-            return -1;
-        }
+                // Se incrementa el contador por la comparación realizada
+                comparaciones++;
+                int comp = string.Compare(arreglo[medio].ISBN, isbn, StringComparison.Ordinal);
 
-        // ===============================================================
-        // OPCIONES INTERACTIVAS Y PRUEBA DE ESCRITORIO
-        // ===============================================================
-
-        static void MostrarCatalogo(Titulo[] catalogo)
-        {
-            Console.WriteLine("\n------------------------------------------------------------------");
-            Console.WriteLine($"{"ISBN",-15} | {"Título",-25} | {"Préstamos",-10} | {"Disponibles",-12}");
-            Console.WriteLine("------------------------------------------------------------------");
-            foreach (var t in catalogo)
-            {
-                Console.WriteLine($"{t.ISBN,-15} | {t.Nombre,-25} | {t.PrestamosHistoricos,-10} | {t.ObtenerDisponibilidad()}/{t.Ejemplares.Length}");
-            }
-        }
-
-        static void OpcionRegistrarPrestamo(Titulo[] catalogo)
-        {
-            Console.Write("\nIngrese el título del libro que desea prestar: ");
-            string nombre = Console.ReadLine();
-            bool encontrado = false;
-
-            for (int i = 0; i < catalogo.Length; i++)
-            {
-                if (catalogo[i].Nombre.Equals(nombre, StringComparison.OrdinalIgnoreCase))
+                if (comp == 0)
                 {
-                    encontrado = true;
-                    if (catalogo[i].RegistrarPrestamo())
-                    {
-                        Console.WriteLine($"-> ¡Préstamo registrado exitosamente! Copias restantes: {catalogo[i].ObtenerDisponibilidad()}");
-                        OrdenarPorInsercionPrestamos(catalogo); // Reordena por cambios en préstamos históricos
-                    }
-                    else
-                    {
-                        Console.WriteLine($"-> No hay ejemplares disponibles de '{catalogo[i].Nombre}'.");
-                    }
-                    break;
+                    return medio; // Encontrado
+                }
+
+                if (comp < 0)
+                {
+                    inicio = medio + 1;
+                }
+                else
+                {
+                    fin = medio - 1;
                 }
             }
 
-            if (!encontrado) Console.WriteLine($"-> El título '{nombre}' no fue encontrado.");
-        }
-
-        static void OpcionBuscarPorTitulo(Titulo[] catalogo)
-        {
-            Console.Write("\nIngrese el título a buscar: ");
-            string busqueda = Console.ReadLine();
-            bool encontrado = false;
-
-            for (int i = 0; i < catalogo.Length; i++)
-            {
-                if (catalogo[i].Nombre.Equals(busqueda, StringComparison.OrdinalIgnoreCase))
-                {
-                    Console.WriteLine($"\n¡Éxito! Título: {catalogo[i].Nombre} | ISBN: {catalogo[i].ISBN} | Disponibles: {catalogo[i].ObtenerDisponibilidad()}/{catalogo[i].Ejemplares.Length}");
-                    encontrado = true;
-                    break;
-                }
-            }
-            if (!encontrado) Console.WriteLine($"-> El título '{busqueda}' no existe.");
-        }
-
-        static void OpcionBuscarPorISBN(Titulo[] catalogo)
-        {
-            Console.Write("\nIngrese el ISBN a buscar: ");
-            string isbn = Console.ReadLine();
-
-            // Generamos una copia ordenada por ISBN exclusivamente para la búsqueda binaria
-            Titulo[] copiaISBN = (Titulo[])catalogo.Clone();
-            OrdenarPorISBN(copiaISBN);
-
-            int idx = BusquedaBinariaISBN(copiaISBN, isbn);
-
-            if (idx != -1)
-            {
-                Console.WriteLine($"\n¡Éxito (Búsqueda Binaria)! Título: {copiaISBN[idx].Nombre} | ISBN: {copiaISBN[idx].ISBN} | Disponibles: {copiaISBN[idx].ObtenerDisponibilidad()}/{copiaISBN[idx].Ejemplares.Length}");
-            }
-            else
-            {
-                Console.WriteLine($"-> El ISBN '{isbn}' no fue encontrado en la biblioteca.");
-            }
-        }
-
-        static void EjecutarPruebaEscritorio(Titulo[] catalogo)
-        {
-            Console.WriteLine("\n=========================================================");
-            Console.WriteLine("    PRUEBA DE ESCRITORIO INTEGRADA (3 PRÉSTAMOS)");
-            Console.WriteLine("=========================================================");
-
-            Console.WriteLine("\n--- ESTADO INICIAL DEL CATÁLOGO ---");
-            MostrarCatalogo(catalogo);
-
-            Console.WriteLine("\nEjecutando 3 Préstamos de prueba:");
-            Console.WriteLine("1. Préstamo de 'Cien Años de Soledad'");
-            catalogo[1].RegistrarPrestamo();
-
-            Console.WriteLine("2. Segundo préstamo de 'Cien Años de Soledad'");
-            catalogo[1].RegistrarPrestamo();
-
-            Console.WriteLine("3. Préstamo de 'Pedro Páramo'");
-            for (int i = 0; i < catalogo.Length; i++)
-            {
-                if (catalogo[i].Nombre == "Pedro Páramo") catalogo[i].RegistrarPrestamo();
-            }
-
-            // Re-ordenamos el catálogo por si cambió la cantidad de préstamos históricos
-            OrdenarPorInsercionPrestamos(catalogo);
-
-            Console.WriteLine("\n--- ESTADO FINAL DEL CATÁLOGO DESPUÉS DE LOS PRÉSTAMOS ---");
-            MostrarCatalogo(catalogo);
-        }
-
-        static void Pausar()
-        {
-            Console.WriteLine("\nPresione cualquier tecla para volver al menú principal...");
-            Console.ReadKey();
+            return -1; // No encontrado
         }
     }
 }
